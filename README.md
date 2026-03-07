@@ -50,34 +50,74 @@ flowchart TB
     Prescriptions --> OCR
 ```
 
-## Data Model Relationships
+## Data Models
 
-```mermaid
-erDiagram
-    User {
-        int id PK
-        string email UK
-        string name
-        string phone
-        string role
-        bool is_active
-        datetime created_at
-    }
-    
-    PatientProfile {
-        int id PK
-        int user_id FK UK
-        int caretaker_id FK
-        int age
-        string medical_conditions
-        datetime created_at
-    }
-    
-    Medication {
-        int id PK
-        string name
-        string dosage
-        string frequency
+### User
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key |
+| email | string | Unique email |
+| name | string | User name |
+| phone | string | Phone number |
+| role | string | caretaker/patient |
+| is_active | bool | Account active |
+| created_at | datetime | Creation date |
+
+### PatientProfile
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key |
+| user_id | int | FK to User (unique) |
+| caretaker_id | int | FK to User |
+| age | int | Patient age |
+| medical_conditions | string | Medical conditions |
+| created_at | datetime | Creation date |
+
+### Medication
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key |
+| name | string | Medication name |
+| dosage | string | Dosage amount |
+| frequency | string | How often |
+| timings | json | Time list |
+| instructions | string | Instructions |
+| patient_id | int | FK to User |
+| created_by_id | int | FK to User |
+| is_active | bool | Is active |
+| created_at | datetime | Creation date |
+
+### AdherenceLog
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key |
+| medication_id | int | FK to Medication |
+| patient_id | int | FK to User |
+| scheduled_time | datetime | When scheduled |
+| taken_time | datetime | When taken (nullable) |
+| status | string | taken/missed/late |
+| created_at | datetime | Creation date |
+
+### Prediction
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key |
+| patient_id | int | FK to User |
+| medication_id | int | FK to Medication (nullable) |
+| predicted_delay_minutes | int | Predicted delay |
+| risk_level | string | low/medium/high |
+| message | string | Prediction message |
+| generated_at | datetime | Generation time |
+
+### Prescription
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Primary key |
+| image | image | Prescription image |
+| extracted_data | json | OCR data |
+| uploaded_by_id | int | FK to User |
+| patient_id | int | FK to User |
+| created_at | datetime | Creation date |
         json timings
         string instructions
         int patient_id FK
