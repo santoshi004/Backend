@@ -1,90 +1,62 @@
-# ⚙️ MedAssist Backend: AI & Data Core
+# MedAssist Backend: Technical Core
 
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![Django](https://img.shields.io/badge/Django-5.0+-green.svg?logo=django&logoColor=white)](https://www.djangoproject.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-blue.svg?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+This repository contains the central server, Machine Learning models, and OCR processing logic for the MedAssist ecosystem.
 
-The backend is the "Brain" of MedAssist. It manages the central database, executes Machine Learning behavioral predictions, and integrates with Cloud AI for OCR prescription scanning.
+## 1. Technical Architecture
 
----
+The backend is built using **Django 5.0** and **Django REST Framework (DRF)**. It emphasizes a modular service-oriented design.
 
-## 🌎 System Overview (The Big Picture)
+### Core Modules
+- **`accounts`**: Implements a Custom User model using email as the identifier. It handles Role-Based Access Control (RBAC) to ensure caretakers and patients only access relevant data.
+- **`medications`**: Manages the medication registry. Includes logic for flexible frequencies and dosage parsing.
+- **`adherence`**: The heart of the tracking system. It calculates adherence rates, streaks, and generates the daily "Today's Schedule" dynamically.
+- **`predictions`**: A dedicated ML service for behavioral analysis.
+- **`prescriptions`**: Handles image processing and integration with Azure Cloud AI.
 
-MedAssist is an ecosystem. Even if you are only working on the Backend, it is critical to understand how the data flows across the entire system.
+## 2. Intelligence Layer Deep-Dive
 
-### Full System Architecture
-```mermaid
-graph TD
-    %% Clients
-    Web["Next.js Web (Caretaker)"]
-    App["Kotlin App (Patient)"]
+### A. Machine Learning Pipeline (`predictions/`)
+MedAssist uses a dual-model approach using **Random Forest** (via `scikit-learn`):
+1.  **Feature Extraction**: For every patient-medication pair, the system generates a 16-dimensional feature vector:
+    - `avg_delay`: Calculating the mean delta between `scheduled_time` and `taken_time`.
+    - `miss_rate`: The ratio of missed doses to total scheduled doses.
+    - `temporal_patterns`: 7 features for day-of-week and 4 for time-of-day adherence rates.
+    - `consistency`: Tracking consecutive missed doses.
+2.  **Risk Classification**: The `RandomForestClassifier` labels patients as Low, Medium, or High risk based on their adherence probability.
+3.  **Delay Regression**: The `RandomForestRegressor` predicts the specific delay (in minutes) for the next scheduled dose.
 
-    %% Backend
-    subgraph Core ["Django REST Backend"]
-        API["REST API Layer"]
-        DB[(PostgreSQL)]
-        ML["Random Forest Engine"]
-        OCR["Prescription Parser"]
-    end
+### B. OCR Processing Pipeline (`prescriptions/`)
+The system integrates with **Azure Form Recognizer** to automate data entry:
+1.  **Image Upload**: The image is stored in PostgreSQL and a reference is sent to Azure.
+2.  **Parsing Logic**: The `ocr_service.py` iterates through Azure's document analysis results to identify "entities" (Drug names, quantities, frequencies).
+3.  **Validation**: Extracted data is presented to the user as a JSON-backed object for final confirmation before being converted into `Medication` model instances.
 
-    %% External
-    Azure["Azure Cloud AI"]
+## 3. Database Schema and Relations
 
-    %% Data Flow
-    Web -- "Manage Meds / Scan" --> API
-    App -- "Log Intake" --> API
-    API -- "Data Storage" --> DB
-    API -- "Behavior Risk" --> ML
-    API -- "Image Analysis" --> OCR
-    OCR -.-> Azure
+The system uses **PostgreSQL**. Key relationships include:
+- **`User` (1) ↔ (1) `PatientProfile`**: Every patient has extended metadata (age, conditions).
+- **`User` (Caretaker) (1) ↔ (N) `PatientProfile`**: One caretaker manages multiple patients.
+- **`Medication` (1) ↔ (N) `AdherenceLog`**: Every log entry points back to its parent medication definition.
+
+## 4. API Security
+
+- **Authentication**: JWT (JSON Web Token) based.
+- **Authorization**: Custom permissions (`IsCaretaker`, `IsPatient`) are enforced at the view level to prevent unauthorized data leakage.
+- **Data Integrity**: All state-changing operations are wrapped in Django DB transactions to ensure log accuracy.
+
+## 5. Development Setup
+
+### Dependencies
+- Python 3.11+
+- PostgreSQL
+- `pip install -r requirements.txt`
+
+### Initialization
+```bash
+python manage.py migrate
+python manage.py seed_demo_data  # Populates DB with test patients, meds, and logs
+python manage.py runserver
 ```
 
-### The "MedAssist Cycle"
-1. **Extraction**: A caretaker scans a prescription. The backend sends it to **Azure**, parses the JSON, and saves `Medication` objects.
-2. **Scheduling**: Every day at midnight, the system generates a `TodaySchedule` for each patient.
-3. **Engagement**: The patient logs a dose (Taken/Late/Missed) via the **Android App** or **Web**.
-4. **Intelligence**: The backend triggers the **Random Forest ML model**, analyzing the last 30 days of logs to predict the patient's risk level for the next week.
-
 ---
-
-## 🧠 Intelligence Module Detail
-
-### Machine Learning
-The `predictions` module uses `scikit-learn` to train on 16 specific features (Average Delay, Day-of-Week Trends, etc.).
-- **ForestClassifier**: Categorizes the patient into High/Medium/Low risk.
-- **ForestRegressor**: Predicts exactly how many minutes late the patient might be for their next dose.
-
-### Prescription OCR
-Located in `prescriptions/services/ocr_service.py`, this module handles the intelligent extraction of medical data from images.
-
----
-
-## 🛠 Backend Components
-- **`accounts/`**: JWT-based authentication and Role-Based Access Control (RBAC).
-- **`medications/`**: Patient profiles and flexible medication definitions.
-- **`adherence/`**: The core logic for logs, streaks, and health statistics.
-
----
-
-## 🚀 Setup & Installation
-
-1. Create a virtual environment:
-   ```bash
-   python -m venv venv && source venv/bin/activate
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. Initialize Database:
-   ```bash
-   python manage.py migrate
-   python manage.py seed_demo_data
-   ```
-4. Start Server:
-   ```bash
-   python manage.py runserver
-   ```
-
----
-<p align="center">Part of the MedAssist Final Year Project Ecosystem</p>
+*Technical Lead: Santoshi*
