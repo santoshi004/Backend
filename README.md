@@ -58,5 +58,12 @@ python manage.py seed_demo_data  # Populates DB with test patients, meds, and lo
 python manage.py runserver
 ```
 
+## 6. Technical Bible: Implementation Deep-Dives
+
+Students should refer to these comprehensive guides for a "zero-base" understanding of the backend logic:
+- [**Adherence & Streak Logic**](../docs/bible/logic-adherence-mathematics.md): How we calculate streaks and success rates.
+- [**ML Feature Engineering**](../docs/bible/logic-predictive-analytics.md): Detailed mapping of the 16 features used for AI.
+- [**Data Lifecycle**](../docs/bible/lifecycle-prescription-to-pill.md): Tracing a prescription from an image to a DB record.
+
 ---
 *Technical Lead: Santoshi*
