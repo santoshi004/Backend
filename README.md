@@ -61,9 +61,9 @@ python manage.py runserver
 ## 6. Technical Implementation Guides
 
 Detailed technical guides for core system logic:
-- [**Adherence & Streak Logic**](../docs/technical-guides/adherence-algorithms.md): Calculation mechanics.
-- [**ML Feature Engineering**](../docs/technical-guides/ml-model-details.md): Model input mapping.
-- [**Data Flow Trace**](../docs/technical-guides/prescription-flow-trace.md): OCR execution path.
+- [**Adherence & Streak Logic**](./docs/technical-guides/adherence-algorithms.md): Calculation mechanics.
+- [**ML Feature Engineering**](./docs/technical-guides/ml-model-details.md): Model input mapping.
+- [**Data Flow Trace**](./docs/technical-guides/prescription-flow-trace.md): OCR execution path.
 
 ---
 *Technical Lead: Santoshi*
