@@ -28,13 +28,8 @@ class PatientProfileSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at")
 
     def get_adherence_rate(self, obj):
-        logs = AdherenceLog.objects.filter(patient=obj.user)
-        total = logs.count()
-        if total == 0:
-            return None
-        taken = logs.filter(status="taken").count()
-        late = logs.filter(status="late").count()
-        return round((taken + late) / total * 100, 2)
+        from adherence.utils.rates import calculate_adherence_rate
+        return calculate_adherence_rate(obj.user)
 
 
 class PatientProfileCreateSerializer(serializers.ModelSerializer):

@@ -57,11 +57,11 @@ def check_and_trigger_reminders():
                     logged = AdherenceLog.objects.filter(
                         medication=med,
                         patient=med.patient,
-                        timestamp__date=now.date()
+                        scheduled_time__date=now.date()
                     ).exists()
                     
                     if not logged:
-                        res = send_medication_reminder(med.patient.user, med, "due")
+                        res = send_medication_reminder(med.patient, med, "due")
                         results.append(res)
             except Exception as e:
                 print(f"Error processing timing {timing_str}: {e}")

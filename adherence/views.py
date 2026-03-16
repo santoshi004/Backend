@@ -161,7 +161,9 @@ class AdherenceStatsView(APIView):
         taken = logs.filter(status='taken').count()
         missed = logs.filter(status='missed').count()
         late = logs.filter(status='late').count()
-        adherence_rate = (taken / total * 100) if total > 0 else 0.0
+        
+        from .utils.rates import calculate_adherence_rate
+        adherence_rate = calculate_adherence_rate(patient_user)
 
         # Calculate streaks (consecutive taken days)
         current_streak = 0
