@@ -193,21 +193,33 @@ class PredictionPlaygroundView(APIView):
         from .services.ml_service import predict_for_patient_medication, _load_models, _features_to_array, _rule_based_prediction
         
         classifier, regressor = _load_models()
+        # For the demo lab, we want to show the "Logic" even if ML is shy.
+        # We'll use a Hybrid approach.
+        
+        # 1. Start with Rule-Based (Always works and is sensitive)
+        res = _rule_based_prediction(features)
+        risk_level = res['risk_level']
+        pred_delay = res['predicted_delay_minutes']
+        method = "Clinical Engine"
+
+        # 2. Try to augment with ML if available
         if classifier and regressor:
-            X = _features_to_array(features)
-            risk_level = classifier.predict(X)[0]
-            pred_delay = int(regressor.predict(X)[0])
-            method = "ML Random Forest"
-        else:
-            res = _rule_based_prediction(features)
-            risk_level = res['risk_level']
-            pred_delay = res['predicted_delay_minutes']
-            method = "Rule-Based System"
+            try:
+                X = _features_to_array(features)
+                ml_risk = classifier.predict(X)[0]
+                # If ML is MORE concerned than rules, trust ML. 
+                # Otherwise, keep rules as safety net for small datasets.
+                if (ml_risk == 'high' and risk_level != 'high') or (ml_risk == 'medium' and risk_level == 'low'):
+                    risk_level = ml_risk
+                    method = "ML Random Forest"
+                pred_delay = int(regressor.predict(X)[0])
+            except:
+                pass
 
         return Response({
             'risk_level': risk_level,
             'predicted_delay_minutes': pred_delay,
             'weighted_adherence': round(simulated_weighted, 2),
             'method_used': method,
-            'explanation': f"Risk is {risk_level} because weighted adherence is {simulated_weighted:.1f}%."
+            'explanation': f"Risk is {risk_level} because weighted adherence is {simulated_weighted:.1f}% and consecutive misses is {consecutive_misses}."
         })

@@ -275,11 +275,13 @@ def _rule_based_prediction(features):
     Fallback rule-based prediction when ML models are not available.
     """
     score = features.get('weighted_adherence', 100.0)
-    avg_delay = features['avg_delay']
+    avg_delay = features.get('avg_delay', 0)
+    consecutive = features.get('consecutive_misses', 0)
 
-    if score <= 50.0 or features['consecutive_misses'] >= 5:
+    # High sensitivity for demos:
+    if score < 45.0 or consecutive >= 4 or avg_delay >= 300:
         risk_level = 'high'
-    elif score <= 80.0 or avg_delay >= 30:
+    elif score < 85.0 or consecutive >= 2 or avg_delay >= 60:
         risk_level = 'medium'
     else:
         risk_level = 'low'
