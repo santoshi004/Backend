@@ -274,3 +274,59 @@ class TodayScheduleView(APIView):
             'date': today.isoformat(),
             'medications': schedule
         })
+
+
+class AdherenceRemindersView(APIView):
+    """
+    GET /api/adherence/reminders/
+    Returns pending medication reminders that need absolute attention (voice + notify).
+    """
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request, *args, **kwargs):
+        patient_user, error = _resolve_patient(request)
+        if error:
+            return error
+
+        now = timezone.now()
+        today = now.date()
+        
+        # We look for medications due today that are NOT logged
+        medications = Medication.objects.filter(
+            patient=patient_user, is_active=True
+        )
+        
+        # Get existing logs for today to exclude already taken
+        today_start = timezone.make_aware(datetime.combine(today, time.min))
+        today_end = timezone.make_aware(datetime.combine(today, time.max))
+        logged_med_ids = AdherenceLog.objects.filter(
+            patient=patient_user,
+            scheduled_time__range=(today_start, today_end),
+        ).values_list('medication_id', flat=True)
+
+        reminders = []
+        for med in medications:
+            if med.id in logged_med_ids:
+                continue
+
+            for timing_str in med.timings:
+                try:
+                    hour, minute = map(int, timing_str.split(':'))
+                    scheduled_dt = timezone.make_aware(
+                        datetime.combine(today, time(hour, minute))
+                    )
+                    
+                    # If it's within the window (due in last 30 mins)
+                    # and hasn't been logged
+                    diff = now - scheduled_dt
+                    if timedelta(minutes=0) <= diff <= timedelta(minutes=60):
+                        reminders.append({
+                            "id": med.id,
+                            "title": "Medication Reminder",
+                            "message": f"Time to take {med.name} ({med.dosage})",
+                            "speech_text": f"Reminder: It's time to take your dose of {med.name}."
+                        })
+                except (ValueError, TypeError):
+                    continue
+
+        return Response({"reminders": reminders})

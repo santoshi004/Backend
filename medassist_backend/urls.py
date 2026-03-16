@@ -14,6 +14,7 @@ urlpatterns = [
     path('api/', include('adherence.urls')),
     path('api/', include('prescriptions.urls')),
     path('api/', include('predictions.urls')),
+    path('webpush/', include('webpush.urls')),
 ]
 
 if settings.DEBUG:

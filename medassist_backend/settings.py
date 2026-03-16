@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "adherence",
     "prescriptions",
     "predictions",
+    "webpush",
 ]
 
 MIDDLEWARE = [
@@ -171,3 +172,10 @@ AZURE_FORM_RECOGNIZER_KEY = os.getenv("AZURE_FORM_RECOGNIZER_KEY", "")
 
 # Gemini API (for intelligent parsing)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+
+# WebPush Settings
+WEBPUSH_SETTINGS = {
+    "VAPID_PUBLIC_KEY": "BBzdZHSw8oDv5J--SszOnXldDM8rMI0SNCR7614fUuzE6AH7dffZFsZmCEQwyE6kTjJpdycsYefnB9RM88_iEZ8",
+    "VAPID_PRIVATE_KEY": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgD8HASGFVqhmV//GqpbvNO8Tw1kZlwVmqtIMwdkleo+GhRANCAAQc3WR0sPKA7+SfvkrMzp15XQzPKzCNEjQke+teH1LsxOgB+3X32RbGZghEMMhOpE4yaXcnLGHn5wfUTPPP4hGf",
+    "VAPID_ADMIN_EMAIL": "admin@medassist.com",
+}
