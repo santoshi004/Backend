@@ -12,6 +12,7 @@ The backend is built using **Django 5.0** and **Django REST Framework (DRF)**. I
 - **`adherence`**: The heart of the tracking system. It calculates adherence rates, streaks, and generates the daily "Today's Schedule" dynamically.
 - **`predictions`**: A dedicated ML service for behavioral analysis.
 - **`prescriptions`**: Handles image processing and integration with Azure Cloud AI.
+- **`webpush`**: (Integration) Handles VAPID key signing and push subscription storage.
 
 ## 2. Intelligence Layer Deep-Dive
 
@@ -61,7 +62,8 @@ python manage.py runserver
 ## 6. Technical Implementation Guides
 
 Detailed technical guides for core system logic:
-- [**Adherence & Streak Logic**](./docs/technical-guides/adherence-algorithms.md): Calculation mechanics.
+- [**Adherence & Streak Logic**](./docs/technical-guides/adherence-algorithms.md): Weighted time-decay calculation.
+- [**Voice & Notify Architecture**](./docs/technical-guides/mobile-architecture-sync.md): WebPush and WorkManager implementation.
 - [**ML Feature Engineering**](./docs/technical-guides/ml-model-details.md): Model input mapping.
 - [**Data Flow Trace**](./docs/technical-guides/prescription-flow-trace.md): OCR execution path.
 
