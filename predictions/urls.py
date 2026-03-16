@@ -15,4 +15,9 @@ urlpatterns = [
         views.PredictionListView.as_view(),
         name='prediction-list',
     ),
+    path(
+        'predictions/playground/',
+        views.PredictionPlaygroundView.as_view(),
+        name='prediction-playground',
+    ),
 ]

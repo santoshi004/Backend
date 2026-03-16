@@ -146,3 +146,68 @@ class GeneratePredictionView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+class PredictionPlaygroundView(APIView):
+    """
+    POST /api/predictions/playground/
+    Accepts raw features and returns a prediction for demo purposes.
+    """
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, *args, **kwargs):
+        avg_delay = float(request.data.get('avg_delay', 0))
+        miss_rate = float(request.data.get('miss_rate', 0))
+        consecutive_misses = int(request.data.get('consecutive_misses', 0))
+        
+        # Calculate a simulated weighted adherence
+        # Simulating 10 logs for the math
+        total = 10
+        missed_count = round(miss_rate * total)
+        taken_count = total - missed_count
+        
+        # We assume 'taken' includes some 'late' penalty based on avg_delay
+        # This is a simplification for the playground
+        score = 0.0
+        for _ in range(taken_count):
+            if avg_delay <= 60: # taken within 1h
+                score += 1.0
+            else:
+                delay_hours = avg_delay / 60.0
+                effective_late_hours = max(0, delay_hours - 1)
+                score += max(0.4, 1.0 - (effective_late_hours / 10.0))
+        
+        simulated_weighted = (score / total) * 100
+        
+        features = {
+            'avg_delay': avg_delay,
+            'miss_rate': miss_rate,
+            'late_rate': 0.0, # Simple playground
+            'weighted_adherence': simulated_weighted,
+            'consecutive_misses': consecutive_misses,
+            'total_logs': total,
+        }
+        # Fill patterns with 1.0
+        for d in range(7): features[f'day_pattern_{d}'] = 1.0
+        for tb in ['morning', 'afternoon', 'evening', 'night']: features[f'time_pattern_{tb}'] = 1.0
+        
+        from .services.ml_service import predict_for_patient_medication, _load_models, _features_to_array, _rule_based_prediction
+        
+        classifier, regressor = _load_models()
+        if classifier and regressor:
+            X = _features_to_array(features)
+            risk_level = classifier.predict(X)[0]
+            pred_delay = int(regressor.predict(X)[0])
+            method = "ML Random Forest"
+        else:
+            res = _rule_based_prediction(features)
+            risk_level = res['risk_level']
+            pred_delay = res['predicted_delay_minutes']
+            method = "Rule-Based System"
+
+        return Response({
+            'risk_level': risk_level,
+            'predicted_delay_minutes': pred_delay,
+            'weighted_adherence': round(simulated_weighted, 2),
+            'method_used': method,
+            'explanation': f"Risk is {risk_level} because weighted adherence is {simulated_weighted:.1f}%."
+        })

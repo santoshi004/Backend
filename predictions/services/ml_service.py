@@ -94,6 +94,28 @@ def _extract_features(adherence_logs):
             current_consecutive += 1
             max_consecutive_misses = max(max_consecutive_misses, current_consecutive)
 
+    # Calculate our new weighted adherence feature
+    from adherence.utils.rates import calculate_adherence_rate
+    # Create a temporary list of logs for the utility (which usually queries the DB)
+    # But here we already have the logs, so we can mock a minimal patient or just 
+    # use the raw math directly for efficiency.
+    
+    total_score = 0.0
+    for log in adherence_logs:
+        if log.status == 'taken':
+            total_score += 1.0
+        elif log.status == 'late':
+            if log.taken_time and log.scheduled_time:
+                delay_delta = log.taken_time - log.scheduled_time
+                delay_hours = delay_delta.total_seconds() / 3600.0
+                effective_late_hours = max(0, delay_hours - 1)
+                total_score += max(0.4, 1.0 - (effective_late_hours / 10.0))
+            else:
+                total_score += 0.5
+        # Status 'missed' is 0.0
+        
+    weighted_adherence = (total_score / total) * 100 if total > 0 else 0.0
+
     avg_delay = np.mean(delays) if delays else 0.0
     miss_rate = missed / total if total > 0 else 0.0
     late_rate = late / total if total > 0 else 0.0
@@ -102,6 +124,7 @@ def _extract_features(adherence_logs):
         'avg_delay': avg_delay,
         'miss_rate': miss_rate,
         'late_rate': late_rate,
+        'weighted_adherence': weighted_adherence,
         'consecutive_misses': max_consecutive_misses,
         'total_logs': total,
     }
@@ -142,7 +165,8 @@ def _empty_features():
 def _features_to_array(features):
     """Convert feature dict to numpy array in consistent order."""
     feature_order = [
-        'avg_delay', 'miss_rate', 'late_rate', 'consecutive_misses', 'total_logs',
+        'avg_delay', 'miss_rate', 'late_rate', 'weighted_adherence',
+        'consecutive_misses', 'total_logs',
         'day_pattern_0', 'day_pattern_1', 'day_pattern_2', 'day_pattern_3',
         'day_pattern_4', 'day_pattern_5', 'day_pattern_6',
         'time_pattern_morning', 'time_pattern_afternoon',
@@ -182,11 +206,11 @@ def train_models():
             features = _extract_features(logs)
             X_data.append(_features_to_array(features).flatten())
 
-            # Determine ground truth risk level
-            miss_rate = features['miss_rate']
-            if miss_rate >= 0.4:
+            # Determine ground truth risk level using Weighted Adherence
+            score = features['weighted_adherence']
+            if score <= 50.0 or features['consecutive_misses'] >= 5:
                 y_risk.append('high')
-            elif miss_rate >= 0.15:
+            elif score <= 80.0:
                 y_risk.append('medium')
             else:
                 y_risk.append('low')
@@ -250,12 +274,12 @@ def _rule_based_prediction(features):
     """
     Fallback rule-based prediction when ML models are not available.
     """
-    miss_rate = features['miss_rate']
+    score = features.get('weighted_adherence', 100.0)
     avg_delay = features['avg_delay']
 
-    if miss_rate >= 0.4 or features['consecutive_misses'] >= 5:
+    if score <= 50.0 or features['consecutive_misses'] >= 5:
         risk_level = 'high'
-    elif miss_rate >= 0.15 or avg_delay >= 30:
+    elif score <= 80.0 or avg_delay >= 30:
         risk_level = 'medium'
     else:
         risk_level = 'low'
