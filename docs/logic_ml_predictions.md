@@ -16,6 +16,7 @@ Before the model can predict anything, we must convert raw `AdherenceLog` data i
 | :--- | :--- | :--- |
 | `avg_delay` | Average minutes late | Shows general punctuality. |
 | `miss_rate` | % of missed doses | Primary indicator of high risk. |
+| **`weighted_adherence`** | **17th Feature** | The Time-Decayed score (Section 2 of Adherence Guide). |
 | `consecutive_misses` | Max missed in a row | Shows if the patient has "abandoned" the med. |
 | `day_pattern_0-6` | Adherence rate per day | Detects "Weekend" vs "Weekday" issues. |
 | `time_pattern_*` | Rate for Morning/Night | Detects "Sleeping through dose" issues. |

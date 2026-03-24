@@ -12,16 +12,17 @@ Every time a patient is supposed to take a medication, the system (eventually) c
 
 ---
 
-## 2. Calculating the Adherence Rate
-**Location**: `backend/adherence/views.py` -> `AdherenceStatsView`
+## 2. Calculating the Adherence Rate (Linear Decay)
+**Location**: `backend/adherence/utils/rates.py` -> `calculate_adherence_rate()`
 
-The Adherence Rate is a simple percentage of all "Taken" doses compared to the total number of doses scheduled for that patient.
+The Adherence Rate is no longer a simple percentage. We use a **Linear Decay Formula** to give partial credit for late doses.
 
 **The Formula**:
-```python
-adherence_rate = (total_taken / total_scheduled) * 100
-```
-*Note: We include "late" doses in the "taken" count for the general rate, though the ML model treats them separately.*
+1. **Dose Penalty**: `penalty = hours_late * 0.1` 
+2. **Dose Score**: `score = max(0.4, 1.0 - penalty)`
+3. **Cumulative Rate**: `(Sum of Scores / Total Expected Doses) * 100`
+
+*Example*: If a med is 2 hours late, the patient gets **80% credit** for that dose. This provides a much more sensitive health metric for the ML model.*
 
 ---
 
