@@ -9,7 +9,7 @@ The backend is built using **Django 5.0** and **Django REST Framework (DRF)**. I
 ### Core Modules
 - **`accounts`**: Implements a Custom User model using email as the identifier. It handles Role-Based Access Control (RBAC) to ensure caretakers and patients only access relevant data.
 - **`medications`**: Manages the medication registry. Includes logic for flexible frequencies and dosage parsing.
-- **`adherence`**: The heart of the tracking system. It calculates adherence rates, streaks, and generates the daily "Today's Schedule" dynamically.
+- **`adherence`**: The heart of the tracking system. It calculates adherence rates using a **Linear Decay Algorithm** (`max(0.4, 1.0 - penalty)`), tracks perfect-day streaks, and generates dynamic schedules.
 - **`predictions`**: A dedicated ML service for behavioral analysis.
 - **`prescriptions`**: Handles image processing and integration with Azure Cloud AI.
 - **`webpush`**: (Integration) Handles VAPID key signing and push subscription storage.
@@ -18,9 +18,10 @@ The backend is built using **Django 5.0** and **Django REST Framework (DRF)**. I
 
 ### A. Machine Learning Pipeline (`predictions/`)
 MedAssist uses a dual-model approach using **Random Forest** (via `scikit-learn`):
-1.  **Feature Extraction**: For every patient-medication pair, the system generates a 16-dimensional feature vector:
+1.  **Feature Extraction**: For every patient-medication pair, the system generates a **17-dimensional feature vector**:
     - `avg_delay`: Calculating the mean delta between `scheduled_time` and `taken_time`.
     - `miss_rate`: The ratio of missed doses to total scheduled doses.
+    - `weighted_adherence`: A 17th feature derived from the Time-Decay scoring engine (Section 12).
     - `temporal_patterns`: 7 features for day-of-week and 4 for time-of-day adherence rates.
     - `consistency`: Tracking consecutive missed doses.
 2.  **Risk Classification**: The `RandomForestClassifier` labels patients as Low, Medium, or High risk based on their adherence probability.
