@@ -198,20 +198,25 @@ class Command(BaseCommand):
                     f'  [{status_str}] {patient.name}: {med.name} {med.dosage}'
                 )
 
-        # Generate 30 days of adherence logs
-        self.stdout.write('\nGenerating adherence logs (30 days)...')
+        # Generate 30 days of adherence logs (including today)
+        self.stdout.write('\nGenerating adherence logs (30 days + today)...')
         total_logs = 0
-        today = timezone.now().date()
+        now = timezone.now()
+        today = now.date()
 
         for (patient_id, med_name), (med, med_data, profile) in all_meds.items():
             patient = med.patient
-            for day_offset in range(30, 0, -1):
+            for day_offset in range(30, -1, -1):
                 log_date = today - timedelta(days=day_offset)
                 for timing_str in med_data['timings']:
                     hour, minute = map(int, timing_str.split(':'))
                     scheduled_dt = timezone.make_aware(
                         datetime.combine(log_date, time(hour, minute))
                     )
+
+                    # For today, don't generate logs for future times
+                    if day_offset == 0 and scheduled_dt > now:
+                        continue
 
                     # Check if log already exists
                     if AdherenceLog.objects.filter(
@@ -225,7 +230,12 @@ class Command(BaseCommand):
                         taken_dt = scheduled_dt + timedelta(minutes=delay_min)
                         log_status = 'taken'
                     elif roll < profile['taken'] + profile['late']:
-                        delay_min = random.randint(15, profile['max_delay'])
+                        # Diversify late delays to show weighted adherence in action
+                        # 40% slightly late (1-2h), 60% significantly late (3-8h)
+                        if random.random() < 0.4:
+                            delay_min = random.randint(65, 120)
+                        else:
+                            delay_min = random.randint(180, 480)
                         taken_dt = scheduled_dt + timedelta(minutes=delay_min)
                         log_status = 'late'
                     else:
