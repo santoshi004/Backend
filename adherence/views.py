@@ -173,7 +173,8 @@ class AdherenceStatsView(APIView):
         # Get distinct dates with all-taken status
         dates_with_logs = {}
         for log in logs:
-            date_key = log.scheduled_time.date()
+            local_scheduled_time = timezone.localtime(log.scheduled_time)
+            date_key = local_scheduled_time.date()
             if date_key not in dates_with_logs:
                 dates_with_logs[date_key] = True
             if log.status != 'taken':
@@ -239,7 +240,9 @@ class TodayScheduleView(APIView):
         # Build a lookup: (medication_id, scheduled_time_str) -> status
         log_lookup = {}
         for med_id, sched_time, log_status, t_time in existing_logs:
-            time_key = sched_time.strftime('%H:%M')
+            # Localize the scheduled time before comparing with timing strings
+            local_sched_time = timezone.localtime(sched_time)
+            time_key = local_sched_time.strftime('%H:%M')
             log_lookup[(med_id, time_key)] = {
                 'status': log_status,
                 'taken_time': t_time.isoformat() if t_time else None
