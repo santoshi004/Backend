@@ -33,9 +33,9 @@ def send_medication_reminder(user, medication, reminder_type="due"):
 def check_and_trigger_reminders():
     """
     Logic to identify who needs a reminder NOW.
-    Usually called by a periodic task.
     """
-    now = timezone.now()
+    # Use localized time for comparison with medication timings
+    now = timezone.localtime(timezone.now())
     current_time = now.time()
     
     # Simple logic: check medications due within the last 5 minutes that aren't logged
