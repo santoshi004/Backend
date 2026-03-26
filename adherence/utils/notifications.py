@@ -26,9 +26,15 @@ def send_medication_reminder(user, medication, reminder_type="due"):
     # Send to the user's group (django-webpush uses groups for targeted delivery)
     # The frontend will subscribe to a group named after the username or user ID
     group_name = f"user_{user.id}"
-    send_group_notification(group_name=group_name, payload=payload, ttl=3600)
     
-    return f"Reminder sent to {user.email} for {medication.name}"
+    try:
+        send_group_notification(group_name=group_name, payload=payload, ttl=3600)
+        return f"Push Reminder sent to {user.email} for {medication.name}"
+    except Exception as e:
+        # This usually means the user has not registered any device for WebPush yet
+        if "Group matching query does not exist" in str(e):
+            return f"Skipped: {user.email} has no registered push devices for {medication.name}"
+        raise e
 
 def check_and_trigger_reminders():
     """
