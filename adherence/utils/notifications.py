@@ -52,12 +52,15 @@ def check_and_trigger_reminders():
     
     for med in meds:
         # Assuming timings is a list of strings like ["08:00", "20:00"]
+        print(f"DEBUG: Checking {med.name} for {med.patient.email} (Timings: {med.timings})")
         for timing_str in med.timings:
             try:
                 hour, minute = map(int, timing_str.split(':'))
                 # If current time is past the timing but within an hour
                 # and no log exists for today
                 # (This is very basic logic for the prototype)
+                print(f"  DEBUG: Target {hour:02d}:{minute:02d} vs Current {current_time.hour:02d}:{current_time.minute:02d}")
+                
                 if hour == current_time.hour and abs(minute - current_time.minute) < 5:
                     # Check if logged today
                     logged = AdherenceLog.objects.filter(
@@ -65,6 +68,8 @@ def check_and_trigger_reminders():
                         patient=med.patient,
                         scheduled_time__date=now.date()
                     ).exists()
+                    
+                    print(f"  DEBUG: Match found! Already logged: {logged}")
                     
                     if not logged:
                         res = send_medication_reminder(med.patient, med, "due")
