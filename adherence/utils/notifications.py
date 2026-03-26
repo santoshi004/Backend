@@ -61,7 +61,7 @@ def check_and_trigger_reminders():
                 # (This is very basic logic for the prototype)
                 print(f"  DEBUG: Target {hour:02d}:{minute:02d} vs Current {current_time.hour:02d}:{current_time.minute:02d}")
                 
-                if hour == current_time.hour and abs(minute - current_time.minute) < 5:
+                if hour == current_time.hour and abs(minute - current_time.minute) < 2:
                     # Check if logged today
                     logged = AdherenceLog.objects.filter(
                         medication=med,
