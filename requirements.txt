@@ -8,3 +8,5 @@ azure-ai-formrecognizer>=3.3,<4.0
 Pillow>=10.0,<11.0
 python-dotenv>=1.0,<2.0
 django-filter>=24.0,<25.0
+django-webpush>=0.3.4
+gunicorn>=21.0,<22.0
