@@ -26,10 +26,11 @@ if [ ! -z "$API_PID" ]; then
     kill -9 $API_PID
 fi
 
-# Kill Any Screen Sessions
+# Kill Any Screen Sessions (Aggressive cleanup for duplicates)
 echo "  Clearing old screen sessions..."
-screen -X -S api quit 2>/dev/null
-screen -X -S monitor quit 2>/dev/null
+pkill -f "screen.*monitor" 2>/dev/null
+pkill -f "screen.*api" 2>/dev/null
+screen -wipe > /dev/null 2>&1
 
 # 5. Start New Background Sessions
 echo "🚀 Spinning up New Background Services..."
