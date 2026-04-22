@@ -31,8 +31,9 @@ MedAssist uses a dual-model approach using **Random Forest** (via `scikit-learn`
 ### B. OCR Processing Pipeline (`prescriptions/`)
 The system integrates with **Azure Form Recognizer** to automate data entry:
 1.  **Image Upload**: The image is stored in PostgreSQL and a reference is sent to Azure.
-2.  **Parsing Logic**: The `ocr_service.py` iterates through Azure's document analysis results to identify "entities" (Drug names, quantities, frequencies).
-3.  **Validation**: Extracted data is presented to the user as a JSON-backed object for final confirmation before being converted into `Medication` model instances.
+2.  **Identity Resolution**: For patient users, identity is automatically resolved from the Bearer token. Caretakers can manually select target patients.
+3.  **Parsing Logic**: The `ocr_service.py` uses Gemini-2.0-Flash to extract structured JSON from raw OCR text.
+4.  **Validation**: Extracted data is presented to the user for final confirmation before being converted into `Medication` model instances.
 
 ## 3. Database Schema and Relations
 
@@ -49,17 +50,19 @@ The system uses **PostgreSQL**. Key relationships include:
 
 ## 5. Development Setup
 
-### Dependencies
-- Python 3.11+
-- PostgreSQL
-- `pip install -r requirements.txt`
+### Initialization (One-Command Setup)
+MedAssist now features a unified bootstrap script for both local and production environments. From the repository root, run:
 
-### Initialization
 ```bash
-python manage.py migrate
-python manage.py seed_demo_data  # Populates DB with test patients, meds, and logs
-python manage.py runserver
+bash setup.sh
 ```
+
+**What this does:**
+1. Initializes the `venv` and installs `requirements.txt`.
+2. Syncs the `.env` configuration.
+3. Runs database migrations.
+4. Seeds the database with demo accounts and retrains the ML models.
+5. Launches background services (API + Voice Monitor) using Linux Screens.
 
 ## 6. Technical Implementation Guides
 

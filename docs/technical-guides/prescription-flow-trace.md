@@ -12,7 +12,7 @@ This document provides a granular code-level trace of how MedAssist processes ph
    ```javascript
    const formData = new FormData();
    formData.append("image", file);
-   formData.append("patient_id", selectedPatientId);
+   formData.append("patient_id", selectedPatientId); // Optional for Patients (Auto-resolved)
    ```
 3. **Execution**: Hits `/api/prescriptions/scan/` via the central Axios `api` instance.
 
