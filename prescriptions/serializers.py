@@ -23,14 +23,15 @@ class PrescriptionScanSerializer(serializers.Serializer):
     """Serializer for scanning/uploading a prescription."""
 
     image = serializers.ImageField()
-    patient_id = serializers.IntegerField()
+    patient_id = serializers.IntegerField(required=False, allow_null=True)
 
     def validate_patient_id(self, value):
         from accounts.models import User
         try:
-            User.objects.get(id=value, role='patient')
+            # Using iexact to be case-insensitive for 'patient' vs 'Patient'
+            User.objects.get(id=value, role__iexact='patient')
         except User.DoesNotExist:
             raise serializers.ValidationError(
-                'Patient user not found or user is not a patient.'
+                f"Patient user with ID {value} not found, or user is not a patient."
             )
         return value

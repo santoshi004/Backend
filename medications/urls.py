@@ -10,5 +10,6 @@ router.register(r'patients', views.PatientProfileViewSet, basename='patient-prof
 router.register(r'medications', views.MedicationViewSet, basename='medication')
 
 urlpatterns = [
+    path('patients/stats/', views.CaretakerStatsView.as_view(), name='caretaker-stats'),
     path('', include(router.urls)),
 ]

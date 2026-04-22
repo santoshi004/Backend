@@ -40,36 +40,59 @@ def check_and_trigger_reminders():
     """
     Logic to identify who needs a reminder NOW.
     """
-    # Use localized time for comparison with medication timings
     now = timezone.localtime(timezone.now())
     current_time = now.time()
     
-    # Simple logic: check medications due within the last 5 minutes that aren't logged
-    # This is a simplified version for demonstration
-    # In a real system, we'd use a more robust scheduling check
-    meds = Medication.objects.all()
+    print(f"--- TRIGGER CHECK AT {now.strftime('%H:%M:%S')} ---")
+    
+    meds = Medication.objects.filter(is_active=True)
     results = []
     
     for med in meds:
-        # Assuming timings is a list of strings like ["08:00", "20:00"]
+        if not med.timings:
+            continue
+            
         for timing_str in med.timings:
             try:
                 hour, minute = map(int, timing_str.split(':'))
-                # If current time is past the timing but within an hour
-                # and no log exists for today
-                # (This is very basic logic for the prototype)
-                if hour == current_time.hour and abs(minute - current_time.minute) < 2:
-                    # Check if logged today
+                
+                # Construct a precise localized datetime for the scheduled dose
+                scheduled_dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                
+                # Check for match (within 2 minutes)
+                time_match = (hour == current_time.hour and abs(minute - current_time.minute) < 2)
+                
+                if time_match:
+                    print(f"[MATCH] Checking {med.patient.email}'s {med.name} (Scheduled: {timing_str})")
+                    
+                    # Check if logged for THIS SPECIFIC TIME today
+                    start_window = scheduled_dt
+                    end_window = scheduled_dt + timezone.timedelta(minutes=1)
+                    
                     logged = AdherenceLog.objects.filter(
                         medication=med,
                         patient=med.patient,
-                        scheduled_time__date=now.date()
+                        scheduled_time__range=(start_window, end_window)
                     ).exists()
                     
-                    if not logged:
-                        res = send_medication_reminder(med.patient, med, "due")
-                        results.append(res)
-            except Exception:
-                pass
+                    # AGGRESSIVE MODE: Send push even if already logged (allows desktop/mobile sync)
+                    print(f"  -> Triggering notification for {med.name}...")
+                    res = send_medication_reminder(med.patient, med, "due")
+                    results.append(res)
+                    print(f"  -> {res}")
+
+                    if logged:
+                        print(f"  Note: Already logged, but push sent to ensure dual-device delivery.")
+                # else:
+                #    # Hidden to avoid clutter, but helpful for deep debugging:
+                #    print(f"[SKIP] {med.name} at {timing_str} doesn't match {current_time.strftime('%H:%M')}")
+                    
+            except Exception as e:
+                print(f"[ERROR] Logic failure for {med.name}: {str(e)}")
+                
+    if not results:
+        print("--- NO MEDICATIONS DUE AT THIS TIME ---")
+        
+    return results
                 
     return results

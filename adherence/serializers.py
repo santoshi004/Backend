@@ -21,31 +21,43 @@ class AdherenceLogSerializer(serializers.ModelSerializer):
 class AdherenceLogCreateSerializer(serializers.Serializer):
     """Serializer for logging medication intake."""
 
-    medication_id = serializers.IntegerField()
-    scheduled_time = serializers.DateTimeField()
+    medication = serializers.IntegerField(required=False)
+    medication_id = serializers.IntegerField(required=False)
+    scheduled_time = serializers.DateTimeField(required=False, allow_null=True)
     taken_time = serializers.DateTimeField(required=False, allow_null=True)
     status = serializers.ChoiceField(choices=['taken', 'missed', 'late'])
 
-    def validate_medication_id(self, value):
+    def validate(self, data):
+        # Handle both medication and medication_id
+        med_id = data.get('medication') or data.get('medication_id')
+        if not med_id:
+            raise serializers.ValidationError("Medication ID is required.")
+        
         from medications.models import Medication
         user = self.context['request'].user
         try:
-            med = Medication.objects.get(id=value, patient=user, is_active=True)
+            med = Medication.objects.get(id=med_id, patient=user, is_active=True)
+            data['medication_obj'] = med
         except Medication.DoesNotExist:
             raise serializers.ValidationError(
                 'Medication not found or does not belong to you.'
             )
-        return value
+        return data
 
     def create(self, validated_data):
-        from medications.models import Medication
+        from django.utils import timezone
+        
         user = self.context['request'].user
-        medication = Medication.objects.get(id=validated_data['medication_id'])
+        medication = validated_data['medication_obj']
+        
+        # Use provided scheduled_time or default to now
+        scheduled_time = validated_data.get('scheduled_time') or timezone.now()
+        
         return AdherenceLog.objects.create(
             medication=medication,
             patient=user,
-            scheduled_time=validated_data['scheduled_time'],
-            taken_time=validated_data.get('taken_time'),
+            scheduled_time=scheduled_time,
+            taken_time=validated_data.get('taken_time') or timezone.now(),
             status=validated_data['status'],
         )
 

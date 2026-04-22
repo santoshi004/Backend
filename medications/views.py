@@ -1,6 +1,8 @@
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.db.models import Count
 
 from accounts.permissions import IsCaretaker, IsOwnerOrCaretaker
 from adherence.models import AdherenceLog
@@ -22,6 +24,7 @@ class PatientProfileViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ("create",):
@@ -105,6 +108,7 @@ class MedicationViewSet(viewsets.ModelViewSet):
     """
 
     permission_classes = (permissions.IsAuthenticated,)
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
@@ -153,3 +157,44 @@ class MedicationViewSet(viewsets.ModelViewSet):
         """Soft delete - set is_active to False."""
         instance.is_active = False
         instance.save(update_fields=["is_active"])
+
+
+class CaretakerStatsView(APIView):
+    """
+    GET /api/patients/stats/
+    Provides unified aggregate metrics for the caretaker dashboard.
+    """
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        from adherence.utils.rates import calculate_adherence_rate
+        from medications.models import PatientProfile, Medication
+        
+        patients = PatientProfile.objects.filter(caretaker=request.user)
+        total_patients = patients.count()
+        
+        # Calculate medications managed
+        patient_ids = patients.values_list("user_id", flat=True)
+        total_medications = Medication.objects.filter(
+            patient_id__in=patient_ids, 
+            is_active=True
+        ).count()
+
+        # Calculate adherence stats
+        adherence_scores = []
+        high_risk_count = 0
+        
+        for p in patients:
+            rate = calculate_adherence_rate(p.user)
+            adherence_scores.append(rate)
+            if rate < 70: # Threshold for high risk matching UI logic
+                high_risk_count += 1
+        
+        avg_adherence = sum(adherence_scores) / len(adherence_scores) if adherence_scores else 0
+        
+        return Response({
+            "total_patients": total_patients,
+            "total_medications": total_medications,
+            "average_adherence": round(avg_adherence, 1),
+            "high_risk_count": high_risk_count,
+        })

@@ -154,22 +154,57 @@ class PredictionPlaygroundView(APIView):
     """
     permission_classes = (permissions.IsAuthenticated,)
 
+    def get(self, request, *args, **kwargs):
+        """
+        GET /api/predictions/playground/
+        Return a list of patient names and their IDs for the "Load Patient" feature.
+        """
+        from medications.models import PatientProfile
+        from adherence.models import AdherenceLog
+        from .services.ml_service import _extract_features
+
+        # Only get patients assigned to this caretaker (or all if caretaker is superuser)
+        user = request.user
+        if user.role != 'caretaker':
+            return Response({'error': 'unauthorized'}, status=403)
+        
+        # Get patients
+        patients_qs = User.objects.filter(role='patient')
+        if not user.is_superuser:
+            patient_ids = PatientProfile.objects.filter(caretaker=user).values_list('user_id', flat=True)
+            patients_qs = patients_qs.filter(id__in=patient_ids)
+
+        profiles = []
+        for p in patients_qs[:15]: # Limit for demo
+            # Get their most relevant stats
+            logs = AdherenceLog.objects.filter(patient=p).order_by('-scheduled_time')[:30]
+            features = _extract_features(list(logs)) if logs.exists() else None
+            
+            profiles.append({
+                'id': p.id,
+                'name': p.name,
+                'stats': {
+                    'miss_rate': round(features['miss_rate'], 2) if features else 0,
+                    'avg_delay': round(features['avg_delay'], 0) if features else 0,
+                    'consecutive_misses': features['consecutive_misses'] if features else 0,
+                }
+            })
+
+        return Response({'profiles': profiles})
+
     def post(self, request, *args, **kwargs):
         avg_delay = float(request.data.get('avg_delay', 0))
         miss_rate = float(request.data.get('miss_rate', 0))
         consecutive_misses = int(request.data.get('consecutive_misses', 0))
         
         # Calculate a simulated weighted adherence
-        # Simulating 10 logs for the math
         total = 10
         missed_count = round(miss_rate * total)
         taken_count = total - missed_count
         
-        # We assume 'taken' includes some 'late' penalty based on avg_delay
-        # This is a simplification for the playground
         score = 0.0
         for _ in range(taken_count):
-            if avg_delay <= 60: # taken within 1h
+            if avg_delay <= 60:
                 score += 1.0
             else:
                 delay_hours = avg_delay / 60.0
@@ -181,45 +216,43 @@ class PredictionPlaygroundView(APIView):
         features = {
             'avg_delay': avg_delay,
             'miss_rate': miss_rate,
-            'late_rate': 0.0, # Simple playground
+            'late_rate': 0.0,
             'weighted_adherence': simulated_weighted,
             'consecutive_misses': consecutive_misses,
             'total_logs': total,
         }
-        # Fill patterns with 1.0
         for d in range(7): features[f'day_pattern_{d}'] = 1.0
         for tb in ['morning', 'afternoon', 'evening', 'night']: features[f'time_pattern_{tb}'] = 1.0
         
-        from .services.ml_service import predict_for_patient_medication, _load_models, _features_to_array, _rule_based_prediction
+        from .services.ml_service import _load_models, _features_to_array, _rule_based_prediction
         
         classifier, regressor = _load_models()
-        # For the demo lab, we want to show the "Logic" even if ML is shy.
-        # We'll use a Hybrid approach.
         
-        # 1. Start with Rule-Based (Always works and is sensitive)
-        res = _rule_based_prediction(features)
-        risk_level = res['risk_level']
-        pred_delay = res['predicted_delay_minutes']
-        method = "Clinical Engine"
-
-        # 2. Try to augment with ML if available
+        # 1. Deterministic System (Rule-Based)
+        clinical_res = _rule_based_prediction(features)
+        
+        # 2. Probabilistic System (ML-Based)
+        ml_insight = None
         if classifier and regressor:
             try:
                 X = _features_to_array(features)
                 ml_risk = classifier.predict(X)[0]
-                # If ML is MORE concerned than rules, trust ML. 
-                # Otherwise, keep rules as safety net for small datasets.
-                if (ml_risk == 'high' and risk_level != 'high') or (ml_risk == 'medium' and risk_level == 'low'):
-                    risk_level = ml_risk
-                    method = "ML Random Forest"
-                pred_delay = int(regressor.predict(X)[0])
-            except:
-                pass
+                ml_delay = int(regressor.predict(X)[0])
+                ml_insight = {
+                    'risk_level': ml_risk,
+                    'predicted_delay_minutes': ml_delay,
+                    'explanation': f"Based on 7,200 samples, the model recognizes this behavior as {ml_risk} risk."
+                }
+            except Exception as e:
+                logger.error(f"Playground ML Error: {e}")
 
         return Response({
-            'risk_level': risk_level,
-            'predicted_delay_minutes': pred_delay,
+            'clinical_engine': {
+                'risk_level': clinical_res['risk_level'],
+                'predicted_delay_minutes': clinical_res['predicted_delay_minutes'],
+                'explanation': clinical_res['message']
+            },
+            'ml_intelligence': ml_insight,
             'weighted_adherence': round(simulated_weighted, 2),
-            'method_used': method,
-            'explanation': f"Risk is {risk_level} because weighted adherence is {simulated_weighted:.1f}% and consecutive misses is {consecutive_misses}."
+            'explanation': f"Baseline rules flag this as {clinical_res['risk_level']} risk."
         })

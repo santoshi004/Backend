@@ -24,13 +24,41 @@ class PrescriptionScanView(APIView):
         serializer = PrescriptionScanSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        patient_id = serializer.validated_data['patient_id']
+        user = request.user
+        request_patient_id = serializer.validated_data.get('patient_id')
         image = serializer.validated_data['image']
-        patient_user = User.objects.get(id=patient_id)
+
+        # Smart Fallback: If the user is a Patient, they are scanning for themselves.
+        # We ignore any bad/missing ID from the phone and just use their own ID.
+        if user.role == 'patient':
+            patient_id = user.id
+        else:
+            # For caretakers, we MUST have a patient_id
+            if not request_patient_id:
+                return Response(
+                    {'error': 'bad_request', 'message': 'Caretakers must provide a patient_id.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            patient_id = request_patient_id
+
+        try:
+            patient_user = User.objects.get(id=patient_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'not_found', 'message': f'Patient user with ID {patient_id} not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
         # Permission check: patient can only scan for self,
         # caretaker can scan for their patients
         user = request.user
+        
+        # Logging for debugging
+        print(f"\n--- SCAN REQUEST ---")
+        print(f"USER: {user.email} (ID: {user.id}, ROLE: {user.role})")
+        print(f"TARGET PATIENT ID: {request.data.get('patient_id')}")
+        print(f"--------------------\n")
+
         if user.role == 'patient' and user.id != patient_id:
             return Response(
                 {'error': 'forbidden', 'message': 'Patients can only scan for themselves.'},

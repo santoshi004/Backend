@@ -27,6 +27,15 @@ def _resolve_patient(request):
     patient_id = request.query_params.get('patient_id')
 
     if patient_id:
+        # If user is a patient, they can only query themselves
+        if user.role == 'patient':
+            if str(user.id) != str(patient_id):
+                return None, Response(
+                    {'error': 'forbidden', 'message': 'You can only query your own data.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return user, None
+            
         if user.role == 'caretaker':
             # Verify caretaker has access to this patient
             from accounts.models import User
@@ -45,11 +54,11 @@ def _resolve_patient(request):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             return patient_user, None
-        else:
-            return None, Response(
-                {'error': 'forbidden', 'message': 'Only caretakers can query other patients.'},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        
+        return None, Response(
+            {'error': 'forbidden', 'message': 'Invalid role for this request.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
     else:
         if user.role == 'patient':
             return user, None
@@ -204,6 +213,7 @@ class AdherenceStatsView(APIView):
             'adherence_rate': round(adherence_rate, 2),
             'current_streak': current_streak,
             'longest_streak': longest_streak,
+            'best_streak': longest_streak, # Explicitly provide for mobile
         }
 
         serializer = AdherenceStatsSerializer(stats)
@@ -296,24 +306,13 @@ class AdherenceRemindersView(APIView):
         now = timezone.now()
         today = now.date()
         
-        # We look for medications due today that are NOT logged
+        # We look for medications due today that are NOT logged for the specific time
         medications = Medication.objects.filter(
             patient=patient_user, is_active=True
         )
         
-        # Get existing logs for today to exclude already taken
-        today_start = timezone.make_aware(datetime.combine(today, time.min))
-        today_end = timezone.make_aware(datetime.combine(today, time.max))
-        logged_med_ids = AdherenceLog.objects.filter(
-            patient=patient_user,
-            scheduled_time__range=(today_start, today_end),
-        ).values_list('medication_id', flat=True)
-
         reminders = []
         for med in medications:
-            if med.id in logged_med_ids:
-                continue
-
             for timing_str in med.timings:
                 try:
                     hour, minute = map(int, timing_str.split(':'))
@@ -321,8 +320,20 @@ class AdherenceRemindersView(APIView):
                         datetime.combine(today, time(hour, minute))
                     )
                     
-                    # If it's within the window (due in last 30 mins)
-                    # and hasn't been logged
+                    # Check if THIS specific dose has been logged
+                    start_window = scheduled_dt
+                    end_window = scheduled_dt + timedelta(minutes=1)
+                    
+                    logged = AdherenceLog.objects.filter(
+                        medication=med,
+                        patient=patient_user,
+                        scheduled_time__range=(start_window, end_window)
+                    ).exists()
+
+                    if logged:
+                        continue
+                        
+                    # If it's within the window (due in last 60 mins)
                     diff = now - scheduled_dt
                     if timedelta(minutes=0) <= diff <= timedelta(minutes=60):
                         reminders.append({

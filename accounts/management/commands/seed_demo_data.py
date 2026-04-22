@@ -1,337 +1,137 @@
-"""
-Management command to seed demo data for MedAssist.
-
-Creates:
-- 2 caretakers
-- 5 patients (linked to caretakers)
-- 2-4 medications per patient
-- 30 days of adherence logs (mix of taken/missed/late)
-- A few prescriptions with sample extracted data
-- ML predictions for all patients
-
-Usage:
-    python manage.py seed_demo_data
-    python manage.py seed_demo_data --clear
-"""
-
 import random
-from datetime import datetime, time, timedelta
-
+from datetime import timedelta
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
-
 from accounts.models import User
+from medications.models import PatientProfile, Medication
 from adherence.models import AdherenceLog
-from medications.models import Medication, PatientProfile
 from predictions.models import Prediction
-from predictions.services.ml_service import generate_predictions_for_patient, train_models
-from prescriptions.models import Prescription
-
-
-DEMO_PASSWORD = 'MedAssist2026!'
-
+from predictions.services.ml_service import train_models
 
 class Command(BaseCommand):
-    help = 'Seed demo data for MedAssist application'
-
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '--clear',
-            action='store_true',
-            help='Clear all existing data before seeding',
-        )
+    help = 'Wipe database and seed 2 Doctors and 6 Patients with unique behaviors. Skips TODAY for demo.'
 
     def handle(self, *args, **options):
-        if options['clear']:
-            self.stdout.write('Clearing existing data...')
-            Prediction.objects.all().delete()
-            Prescription.objects.all().delete()
+        self.stdout.write(self.style.WARNING('WIPING ALL DATA...'))
+        
+        with transaction.atomic():
             AdherenceLog.objects.all().delete()
+            Prediction.objects.all().delete()
             Medication.objects.all().delete()
             PatientProfile.objects.all().delete()
-            User.objects.filter(is_superuser=False).delete()
-            self.stdout.write(self.style.SUCCESS('  Data cleared.'))
+            User.objects.all().delete()
 
-        # Create caretakers
-        self.stdout.write('\nCreating caretakers...')
-        caretakers = []
-        caretaker_data = [
-            {'email': 'dr.smith@medassist.com', 'name': 'Dr. Robert Smith', 'phone': '+1-555-0101'},
-            {'email': 'dr.patel@medassist.com', 'name': 'Dr. Priya Patel', 'phone': '+1-555-0102'},
-        ]
-        for data in caretaker_data:
-            user, created = User.objects.get_or_create(
-                email=data['email'],
-                defaults={
-                    'name': data['name'],
-                    'phone': data['phone'],
-                    'role': 'caretaker',
-                },
+            PASSWORD = 'MedAssist2026!'
+            NOW = timezone.now().replace(hour=20, minute=0, second=0, microsecond=0)
+
+            # 1. Create Doctors
+            dr_smith = User.objects.create_user(
+                email='dr.smith@medassist.com', password=PASSWORD,
+                name='Dr. Robert Smith', role='caretaker'
             )
-            if created or not user.has_usable_password():
-                user.set_password(DEMO_PASSWORD)
-                user.save()
-            caretakers.append(user)
-            status = 'created' if created else 'exists'
-            self.stdout.write(f'  [{status}] {user.name} ({user.email})')
-
-        # Create patients
-        self.stdout.write('\nCreating patients...')
-        patient_data = [
-            {
-                'email': 'john.doe@example.com',
-                'name': 'John Doe',
-                'phone': '+1-555-0201',
-                'age': 65,
-                'conditions': 'Type 2 Diabetes, Hypertension',
-                'caretaker': caretakers[0],
-            },
-            {
-                'email': 'mary.johnson@example.com',
-                'name': 'Mary Johnson',
-                'phone': '+1-555-0202',
-                'age': 72,
-                'conditions': 'High Cholesterol, Osteoarthritis',
-                'caretaker': caretakers[0],
-            },
-            {
-                'email': 'james.wilson@example.com',
-                'name': 'James Wilson',
-                'phone': '+1-555-0203',
-                'age': 58,
-                'conditions': 'Hypertension',
-                'caretaker': caretakers[0],
-            },
-            {
-                'email': 'sarah.brown@example.com',
-                'name': 'Sarah Brown',
-                'phone': '+1-555-0204',
-                'age': 45,
-                'conditions': 'Asthma, Allergies',
-                'caretaker': caretakers[1],
-            },
-            {
-                'email': 'david.lee@example.com',
-                'name': 'David Lee',
-                'phone': '+1-555-0205',
-                'age': 80,
-                'conditions': 'Type 2 Diabetes, Heart Disease, Hypertension',
-                'caretaker': caretakers[1],
-            },
-        ]
-
-        patients = []
-        for data in patient_data:
-            user, created = User.objects.get_or_create(
-                email=data['email'],
-                defaults={
-                    'name': data['name'],
-                    'phone': data['phone'],
-                    'role': 'patient',
-                },
-            )
-            if created or not user.has_usable_password():
-                user.set_password(DEMO_PASSWORD)
-                user.save()
-
-            profile, _ = PatientProfile.objects.get_or_create(
-                user=user,
-                defaults={
-                    'age': data['age'],
-                    'medical_conditions': data['conditions'],
-                    'caretaker': data['caretaker'],
-                },
+            dr_miller = User.objects.create_user(
+                email='dr.miller@medassist.com', password=PASSWORD,
+                name='Dr. Sarah Miller', role='caretaker'
             )
 
-            patients.append(user)
-            status = 'created' if created else 'exists'
-            self.stdout.write(
-                f'  [{status}] {user.name} ({user.email}) -> {data["caretaker"].name}'
-            )
+            # Configuration for the 6 Patients
+            patients_conf = [
+                # Doctor 1 (Smith)
+                {'email': 'p1@medassist.com', 'name': 'Alice (Star Student)', 'doctor': dr_smith, 'behavior': 'star'},
+                {'email': 'p2@medassist.com', 'name': 'Bob (Weekend Socialite)', 'doctor': dr_smith, 'behavior': 'weekend'},
+                {'email': 'p3@medassist.com', 'name': 'Charlie (Morning Rusher)', 'doctor': dr_smith, 'behavior': 'rusher'},
+                # Doctor 2 (Miller)
+                {'email': 'p4@medassist.com', 'name': 'David (Recoverer)', 'doctor': dr_miller, 'behavior': 'recoverer'},
+                {'email': 'p5@medassist.com', 'name': 'Eve (Forgetter)', 'doctor': dr_miller, 'behavior': 'forgetter'},
+                {'email': 'p6@medassist.com', 'name': 'Frank (Lagger)', 'doctor': dr_miller, 'behavior': 'lagger'},
+            ]
 
-        # Create medications
-        self.stdout.write('\nCreating medications...')
-        medication_pool = [
-            {'name': 'Metformin', 'dosage': '500mg', 'frequency': 'twice_daily', 'timings': ['08:00', '20:00'], 'instructions': 'Take with meals'},
-            {'name': 'Lisinopril', 'dosage': '10mg', 'frequency': 'once_daily', 'timings': ['09:00'], 'instructions': 'Take in the morning'},
-            {'name': 'Atorvastatin', 'dosage': '20mg', 'frequency': 'once_daily', 'timings': ['21:00'], 'instructions': 'Take at bedtime'},
-            {'name': 'Amlodipine', 'dosage': '5mg', 'frequency': 'once_daily', 'timings': ['10:00'], 'instructions': 'Take with or without food'},
-            {'name': 'Omeprazole', 'dosage': '20mg', 'frequency': 'once_daily', 'timings': ['07:30'], 'instructions': 'Take before breakfast on empty stomach'},
-            {'name': 'Metoprolol', 'dosage': '50mg', 'frequency': 'twice_daily', 'timings': ['08:00', '20:00'], 'instructions': 'Take with food'},
-            {'name': 'Aspirin', 'dosage': '81mg', 'frequency': 'once_daily', 'timings': ['08:00'], 'instructions': 'Take with food'},
-            {'name': 'Albuterol', 'dosage': '90mcg', 'frequency': 'twice_daily', 'timings': ['08:00', '20:00'], 'instructions': '2 puffs as needed'},
-            {'name': 'Montelukast', 'dosage': '10mg', 'frequency': 'once_daily', 'timings': ['21:00'], 'instructions': 'Take in the evening'},
-            {'name': 'Glipizide', 'dosage': '5mg', 'frequency': 'twice_daily', 'timings': ['07:30', '17:30'], 'instructions': 'Take 30 min before meals'},
-        ]
-
-        # Adherence profiles per patient (controls how well they take medications)
-        adherence_profiles = [
-            {'taken': 0.80, 'late': 0.12, 'missed': 0.08, 'max_delay': 25},   # John - good
-            {'taken': 0.60, 'late': 0.15, 'missed': 0.25, 'max_delay': 45},   # Mary - moderate
-            {'taken': 0.90, 'late': 0.08, 'missed': 0.02, 'max_delay': 20},   # James - excellent
-            {'taken': 0.70, 'late': 0.10, 'missed': 0.20, 'max_delay': 30},   # Sarah - decent
-            {'taken': 0.35, 'late': 0.15, 'missed': 0.50, 'max_delay': 90},   # David - poor
-        ]
-
-        all_meds = {}
-        for i, patient in enumerate(patients):
-            num_meds = random.randint(2, 4)
-            patient_meds = random.sample(medication_pool, k=num_meds)
-            caretaker = patient.patient_profile.caretaker
-
-            for med_data in patient_meds:
-                med, created = Medication.objects.get_or_create(
-                    name=med_data['name'],
-                    patient=patient,
-                    defaults={
-                        'dosage': med_data['dosage'],
-                        'frequency': med_data['frequency'],
-                        'timings': med_data['timings'],
-                        'instructions': med_data['instructions'],
-                        'created_by': caretaker,
-                        'is_active': True,
-                    },
+            for p_info in patients_conf:
+                user = User.objects.create_user(
+                    email=p_info['email'], password=PASSWORD,
+                    name=p_info['name'], role='patient'
                 )
-                all_meds[(patient.id, med_data['name'])] = (med, med_data, adherence_profiles[i])
-                status_str = 'created' if created else 'exists'
-                self.stdout.write(
-                    f'  [{status_str}] {patient.name}: {med.name} {med.dosage}'
+                PatientProfile.objects.create(
+                    user=user, caretaker=p_info['doctor'], age=random.randint(25, 75),
+                    medical_conditions="Demo Condition"
                 )
 
-        # Generate 30 days of adherence logs (including today)
-        self.stdout.write('\nGenerating adherence logs (30 days + today)...')
-        total_logs = 0
-        now = timezone.now()
-        today = now.date()
+                # Each patient gets 2 Medications (8 AM and 8 PM)
+                med1 = Medication.objects.create(
+                    name='Lisinopril', dosage='10mg', frequency='twice_daily',
+                    timings=['08:00', '20:00'], patient=user, created_by=p_info['doctor']
+                )
+                med2 = Medication.objects.create(
+                    name='Metformin', dosage='500mg', frequency='twice_daily',
+                    timings=['08:00', '20:00'], patient=user, created_by=p_info['doctor']
+                )
 
-        for (patient_id, med_name), (med, med_data, profile) in all_meds.items():
-            patient = med.patient
-            for day_offset in range(30, -1, -1):
-                log_date = today - timedelta(days=day_offset)
-                for timing_str in med_data['timings']:
-                    hour, minute = map(int, timing_str.split(':'))
-                    scheduled_dt = timezone.make_aware(
-                        datetime.combine(log_date, time(hour, minute))
+                # Generate 90 days of logs (skipping today)
+                self.stdout.write(f'Generating logs for {p_info["email"]} ({p_info["behavior"]})...')
+                self.generate_behavioral_logs(user, [med1, med2], p_info['behavior'], NOW)
+
+        self.stdout.write(self.style.SUCCESS('Data Seeding Complete!'))
+        self.stdout.write(self.style.WARNING('Retraining ML Models...'))
+        train_models()
+        self.stdout.write(self.style.SUCCESS('Models Retrained! Dashboard Ready.'))
+
+    def generate_behavioral_logs(self, patient, medications, behavior, now):
+        logs = []
+        for day in range(1, 91):  # Start from 1 to skip Day 0 (Today)
+            current_date = (now - timedelta(days=day)).date()
+            
+            for med in medications:
+                for time_str in med.timings:
+                    hour, minute = map(int, time_str.split(':'))
+                    scheduled_time = timezone.make_aware(
+                        timezone.datetime.combine(current_date, timezone.datetime.min.time().replace(hour=hour, minute=minute))
                     )
+                    
+                    # behavioral logic
+                    status = 'taken'
+                    taken_time = scheduled_time + timedelta(minutes=random.randint(-15, 15))
 
-                    # For today, don't generate logs for future times
-                    if day_offset == 0 and scheduled_dt > now:
-                        continue
+                    if behavior == 'star':
+                        # Perfect adherence
+                        pass 
 
-                    # Check if log already exists
-                    if AdherenceLog.objects.filter(
-                        medication=med, patient=patient, scheduled_time=scheduled_dt
-                    ).exists():
-                        continue
+                    elif behavior == 'weekend':
+                        # Fails Sat (5) and Sun (6)
+                        if scheduled_time.weekday() in [5, 6]:
+                            status = 'missed'
+                            taken_time = None
 
-                    roll = random.random()
-                    if roll < profile['taken']:
-                        delay_min = random.randint(0, 5)
-                        taken_dt = scheduled_dt + timedelta(minutes=delay_min)
-                        log_status = 'taken'
-                    elif roll < profile['taken'] + profile['late']:
-                        # Diversify late delays to show weighted adherence in action
-                        # 40% slightly late (1-2h), 60% significantly late (3-8h)
+                    elif behavior == 'rusher':
+                        # Fails 8 AM dose specifically
+                        if hour < 12:
+                            if random.random() < 0.8: # 80% failure rate for morning
+                                status = 'missed'
+                                taken_time = None
+
+                    elif behavior == 'recoverer':
+                        # Improving over time (90 days ago was Day 0)
+                        success_rate = 0.2 + (0.7 * (90 - day) / 90) # Starts low, ends high
+                        if random.random() > success_rate:
+                            status = 'missed'
+                            taken_time = None
+
+                    elif behavior == 'forgetter':
+                        # Random 40% miss rate
                         if random.random() < 0.4:
-                            delay_min = random.randint(65, 120)
-                        else:
-                            delay_min = random.randint(180, 480)
-                        taken_dt = scheduled_dt + timedelta(minutes=delay_min)
-                        log_status = 'late'
-                    else:
-                        taken_dt = None
-                        log_status = 'missed'
+                            status = 'missed'
+                            taken_time = None
 
-                    AdherenceLog.objects.create(
-                        medication=med,
-                        patient=patient,
-                        scheduled_time=scheduled_dt,
-                        taken_time=taken_dt,
-                        status=log_status,
-                    )
-                    total_logs += 1
+                    elif behavior == 'lagger':
+                        # Always 6 hours late
+                        status = 'late'
+                        taken_time = scheduled_time + timedelta(hours=6, minutes=random.randint(0, 30))
 
-        self.stdout.write(f'  Generated {total_logs} adherence log entries.')
+                    logs.append(AdherenceLog(
+                        medication=med, patient=patient,
+                        scheduled_time=scheduled_time, taken_time=taken_time,
+                        status=status, created_at=scheduled_time
+                    ))
 
-        # Create sample prescriptions
-        self.stdout.write('\nCreating sample prescriptions...')
-        sample_prescriptions = [
-            {
-                'patient': patients[0],
-                'uploaded_by': caretakers[0],
-                'extracted_data': {
-                    'medications': [
-                        {'name': 'Metformin', 'dosage': '500mg', 'frequency': 'twice_daily'},
-                        {'name': 'Lisinopril', 'dosage': '10mg', 'frequency': 'once_daily'},
-                    ],
-                    'doctor_name': 'Dr. Robert Smith',
-                    'date': '2026-01-15',
-                },
-            },
-            {
-                'patient': patients[1],
-                'uploaded_by': caretakers[0],
-                'extracted_data': {
-                    'medications': [
-                        {'name': 'Atorvastatin', 'dosage': '20mg', 'frequency': 'once_daily'},
-                    ],
-                    'doctor_name': 'Dr. Robert Smith',
-                    'date': '2026-01-20',
-                },
-            },
-            {
-                'patient': patients[4],
-                'uploaded_by': caretakers[1],
-                'extracted_data': {
-                    'medications': [
-                        {'name': 'Metformin', 'dosage': '500mg', 'frequency': 'twice_daily'},
-                        {'name': 'Aspirin', 'dosage': '81mg', 'frequency': 'once_daily'},
-                        {'name': 'Metoprolol', 'dosage': '50mg', 'frequency': 'twice_daily'},
-                    ],
-                    'doctor_name': 'Dr. Priya Patel',
-                    'date': '2026-02-01',
-                },
-            },
-        ]
-
-        for rx_data in sample_prescriptions:
-            # Create without image (just extracted data for demo)
-            Prescription.objects.create(
-                image='',
-                extracted_data=rx_data['extracted_data'],
-                uploaded_by=rx_data['uploaded_by'],
-                patient=rx_data['patient'],
-            )
-            self.stdout.write(
-                f'  Created prescription for {rx_data["patient"].name}'
-            )
-
-        # Generate ML predictions
-        self.stdout.write('\nTraining ML model and generating predictions...')
-        trained = train_models()
-        if trained:
-            self.stdout.write('  ML model trained successfully.')
-        else:
-            self.stdout.write('  Using rule-based predictions (insufficient data for ML).')
-
-        for patient in patients:
-            predictions = generate_predictions_for_patient(patient)
-            self.stdout.write(
-                f'  Generated {len(predictions)} predictions for {patient.name}'
-            )
-
-        # Summary
-        self.stdout.write(self.style.SUCCESS('\n--- Seed Complete ---'))
-        self.stdout.write(f'Caretakers: {len(caretakers)}')
-        self.stdout.write(f'Patients: {len(patients)}')
-        self.stdout.write(f'Medications: {Medication.objects.count()}')
-        self.stdout.write(f'Adherence Logs: {AdherenceLog.objects.count()}')
-        self.stdout.write(f'Prescriptions: {Prescription.objects.count()}')
-        self.stdout.write(f'Predictions: {Prediction.objects.count()}')
-        self.stdout.write(f'\nAll demo users password: {DEMO_PASSWORD}')
-        self.stdout.write('Caretaker logins:')
-        for c in caretakers:
-            self.stdout.write(f'  {c.email}')
-        self.stdout.write('Patient logins:')
-        for p in patients:
-            self.stdout.write(f'  {p.email}')
+        # Bulk create for performance
+        AdherenceLog.objects.bulk_create(logs)
