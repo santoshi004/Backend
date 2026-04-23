@@ -29,11 +29,11 @@ MedAssist uses a dual-model approach using **Random Forest** (via `scikit-learn`
 3.  **Delay Regression**: The `RandomForestRegressor` predicts the specific delay (in minutes) for the next scheduled dose.
 
 ### B. OCR Processing Pipeline (`prescriptions/`)
-The system integrates with **Azure Form Recognizer** to automate data entry:
-1.  **Image Upload**: The image is stored in PostgreSQL and a reference is sent to Azure.
-2.  **Identity Resolution**: For patient users, identity is automatically resolved from the Bearer token. Caretakers can manually select target patients.
-3.  **Parsing Logic**: The `ocr_service.py` uses Gemini-2.0-Flash to extract structured JSON from raw OCR text.
-4.  **Validation**: Extracted data is presented to the user for final confirmation before being converted into `Medication` model instances.
+The system integrates with **Azure Form Recognizer** and **Gemini AI** to automate data entry:
+1.  **Image Upload**: Input is processed and stored with original metadata.
+2.  **Universal Access**: The API supports both **Self-Service** scanning (for Patients) and **Managed Scanning** (for Caretakers).
+3.  **Identity & Security**: Identity is resolved via JWT. Patients can only edit items within their own schedule, while Caretakers can manage their assigned patient group.
+4.  **Review & Confirm**: All OCR data requires a client-side "Confirm" step before schedule injection, ensuring 100% data fidelity.
 
 ## 3. Database Schema and Relations
 
