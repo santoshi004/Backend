@@ -142,8 +142,10 @@ class MedicationViewSet(viewsets.ModelViewSet):
         return queryset
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "destroy"):
+        if self.action in ("update", "partial_update", "destroy"):
             return [permissions.IsAuthenticated(), IsCaretaker()]
+        # Allow any authenticated user (Patient or Caretaker) to create.
+        # Ownership/Assigned logic is handled in the serializer validation.
         return [permissions.IsAuthenticated()]
 
     def perform_create(self, serializer):

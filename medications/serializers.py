@@ -110,11 +110,22 @@ class MedicationCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate_patient_id(self, value):
         from accounts.models import User
+        user = self.context["request"].user
 
         try:
-            User.objects.get(id=value, role="patient")
+            target_patient = User.objects.get(id=value, role="patient")
         except User.DoesNotExist:
             raise serializers.ValidationError("Patient user not found or user is not a patient.")
+
+        # If user is a patient, they can ONLY add for themselves
+        if user.role == "patient" and user.id != value:
+            raise serializers.ValidationError("Patients can only add medications for themselves.")
+
+        # If user is a caretaker, they can ONLY add for their assigned patients
+        if user.role == "caretaker":
+            if not PatientProfile.objects.filter(user=target_patient, caretaker=user).exists():
+                raise serializers.ValidationError("This patient is not assigned to you.")
+
         return value
 
     def validate_timings(self, value):
