@@ -82,7 +82,7 @@ WSGI_APPLICATION = "medassist_backend.wsgi.application"
 # Database - try PostgreSQL first, fall back to SQLite
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DB_ENGINE = os.getenv("DB_ENGINE", "postgresql")
+DB_ENGINE = os.getenv("DB_ENGINE", "sqlite3")
 
 if DB_ENGINE == "postgresql":
     DATABASES = {
