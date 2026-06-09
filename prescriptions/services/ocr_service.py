@@ -108,7 +108,6 @@ JSON:"""
 
         result = response.json()
 
-        # Extract JSON from Gemini response
         if "candidates" in result:
             text = result["candidates"][0]["content"]["parts"][0]["text"]
             # Clean up markdown formatting if any
