@@ -102,7 +102,7 @@ JSON:"""
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}",
             headers={"Content-Type": "application/json"},
-            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024}},
+            json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1, "maxOutputTokens": 65536}},
             timeout=30,
         )
 
@@ -224,7 +224,7 @@ JSON:"""
                         ]
                     }
                 ],
-                "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024},
+                "generationConfig": {"temperature": 0.1, "maxOutputTokens": 65536},
             },
             timeout=30,
         )
@@ -241,7 +241,13 @@ JSON:"""
             if text.endswith("```"):
                 text = text[:-3]
 
-            parsed = json.loads(text.strip())
+            try:
+                parsed = json.loads(text.strip())
+            except json.JSONDecodeError as e:
+                logger.error(f"Gemini vision JSON parse failed: {e}")
+                logger.error(f"Raw Gemini response text: {text[:500]}")
+                return None
+
             data = {
                 "medications": parsed.get("medications", []),
                 "doctor_name": parsed.get("doctor_name", ""),
