@@ -1,12 +1,16 @@
 """
 OCR service for extracting prescription data from images.
 
-Uses Azure Form Recognizer + Gemini for intelligent parsing,
-falls back to mock for demo/development.
+Pipeline priority:
+  1. Azure Form Recognizer (OCR) → Gemini text parsing
+  2. Direct Gemini vision (if Azure unavailable)
+  3. Mock data (fallback for demo/development)
 """
 
+import base64
 import json
 import logging
+import mimetypes
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -16,16 +20,18 @@ def extract_prescription_data(image_file) -> dict:
     """
     Extract prescription data from an uploaded image file.
 
-    Flow: Azure OCR (get text) -> Gemini (parse to JSON)
+    Priority: Azure OCR → Gemini Vision → Mock
     """
-    # First get raw text from image
     raw_text = _extract_text_from_image(image_file)
 
-    # If Azure worked, use Gemini to parse
     if raw_text and raw_text != "Mock: No Azure OCR":
         return _parse_with_gemini(raw_text)
-    else:
-        return _extract_mock(image_file)
+
+    result = _analyze_image_with_gemini(image_file)
+    if result:
+        return result
+
+    return _extract_mock(image_file)
 
 
 def _extract_text_from_image(image_file) -> str:
@@ -171,6 +177,85 @@ def _simple_parse(text: str) -> dict:
         "date": "",
         "raw_text": text,
     }
+
+
+def _detect_mime_type(image_file) -> str:
+    name = getattr(image_file, "name", "")
+    mime, _ = mimetypes.guess_type(name)
+    return mime if mime in ("image/png", "image/jpeg", "image/webp") else "image/jpeg"
+
+
+def _analyze_image_with_gemini(image_file) -> dict | None:
+    """Send image bytes directly to Gemini multimodal vision."""
+    gemini_key = settings.GEMINI_API_KEY
+    if not gemini_key:
+        return None
+
+    try:
+        import requests
+
+        image_file.seek(0)
+        image_bytes = image_file.read()
+        mime_type = _detect_mime_type(image_file)
+        encoded = base64.b64encode(image_bytes).decode("utf-8")
+
+        prompt = """You are a medical prescription parser.
+Extract all medication details from this prescription image.
+
+Return ONLY valid JSON (no markdown, no explanation):
+{
+  "medications": [
+    {"name": "medicine name", "dosage": "amount", "frequency": "how often"}
+  ],
+  "doctor_name": "doctor's name or empty",
+  "date": "prescription date or empty"
+}
+
+JSON:"""
+
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}",
+            headers={"Content-Type": "application/json"},
+            json={
+                "contents": [
+                    {
+                        "parts": [
+                            {"inline_data": {"mime_type": mime_type, "data": encoded}},
+                            {"text": prompt},
+                        ]
+                    }
+                ],
+                "generationConfig": {"temperature": 0.1, "maxOutputTokens": 1024},
+            },
+            timeout=30,
+        )
+
+        result = response.json()
+
+        if "candidates" in result:
+            text = result["candidates"][0]["content"]["parts"][0]["text"]
+            text = text.strip()
+            if text.startswith("```json"):
+                text = text[7:]
+            if text.startswith("```"):
+                text = text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+
+            parsed = json.loads(text.strip())
+            data = {
+                "medications": parsed.get("medications", []),
+                "doctor_name": parsed.get("doctor_name", ""),
+                "date": parsed.get("date", ""),
+                "raw_text": "",
+            }
+            logger.info("Gemini vision parsed prescription from image")
+            return data
+
+    except Exception as e:
+        logger.error(f"Gemini vision failed: {e}")
+
+    return None
 
 
 def _extract_mock(image_file) -> dict:
